@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "ZJnPZ+/XmiLeNKkQtMiKiCEp5eVFjdpV/3L9CMWtNqZgL1m/taMvxvxfkSjRxUXcf5+bl4q/y23FQ/TCnsT5lA==",
+  "dgSpecHash": "i6pB9VPOx6SePPTXjykKt1e0McOoNv9ka26KFb+7LTAFjnoNDO1KMkQvak8mTp3ED4MNMAAUh+zticIVXT8/Ug==",
   "success": true,
-  "projectFilePath": "C:\\Users\\manpr\\source\\repos\\Projects\\ApplicationToSellThings.APIs\\ApplicationToSellThings.APIs.csproj",
+  "projectFilePath": "C:\\Users\\manpr\\source\\repos\\VisionAPI\\src\\ApplicationToSellThingsAPI\\ApplicationToSellThings.APIs.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\manpr\\.nuget\\packages\\humanizer\\2.14.1\\humanizer.2.14.1.nupkg.sha512",
     "C:\\Users\\manpr\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",

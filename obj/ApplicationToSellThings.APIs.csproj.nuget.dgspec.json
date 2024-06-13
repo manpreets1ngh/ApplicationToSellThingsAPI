@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\manpr\\source\\repos\\Projects\\ApplicationToSellThings.APIs\\ApplicationToSellThings.APIs.csproj": {}
+    "C:\\Users\\manpr\\source\\repos\\VisionAPI\\src\\ApplicationToSellThingsAPI\\ApplicationToSellThings.APIs.csproj": {}
   },
   "projects": {
-    "C:\\Users\\manpr\\source\\repos\\Projects\\ApplicationToSellThings.APIs\\ApplicationToSellThings.APIs.csproj": {
+    "C:\\Users\\manpr\\source\\repos\\VisionAPI\\src\\ApplicationToSellThingsAPI\\ApplicationToSellThings.APIs.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\manpr\\source\\repos\\Projects\\ApplicationToSellThings.APIs\\ApplicationToSellThings.APIs.csproj",
+        "projectUniqueName": "C:\\Users\\manpr\\source\\repos\\VisionAPI\\src\\ApplicationToSellThingsAPI\\ApplicationToSellThings.APIs.csproj",
         "projectName": "ApplicationToSellThings.APIs",
-        "projectPath": "C:\\Users\\manpr\\source\\repos\\Projects\\ApplicationToSellThings.APIs\\ApplicationToSellThings.APIs.csproj",
+        "projectPath": "C:\\Users\\manpr\\source\\repos\\VisionAPI\\src\\ApplicationToSellThingsAPI\\ApplicationToSellThings.APIs.csproj",
         "packagesPath": "C:\\Users\\manpr\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\manpr\\source\\repos\\Projects\\ApplicationToSellThings.APIs\\obj\\",
+        "outputPath": "C:\\Users\\manpr\\source\\repos\\VisionAPI\\src\\ApplicationToSellThingsAPI\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
