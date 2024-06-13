@@ -1,6 +1,7 @@
 ﻿using ApplicationToSellThings.APIs.Models;
 using ApplicationToSellThings.APIs.Services;
 using ApplicationToSellThings.APIs.Services.Interface;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,6 +20,7 @@ namespace ApplicationToSellThings.APIs.Controllers
         }
 
         [HttpPost]
+        [Authorize(Policy = "UserOnly")]
         public async Task<IActionResult> CreateOrder(OrderApiRequestModel orderRequestModel)
         {
             try
