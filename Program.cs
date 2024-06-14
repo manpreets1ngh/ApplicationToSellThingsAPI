@@ -65,6 +65,8 @@ builder.Services.AddAuthentication(options =>
     {
         ValidateIssuer = true,
         ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
         ClockSkew = TimeSpan.Zero,
@@ -74,7 +76,7 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("UserOnly", policy => policy.RequireRole("User"));
+    options.AddPolicy("UserPolicy", policy => policy.RequireRole("User"));
 });
 
 var app = builder.Build();

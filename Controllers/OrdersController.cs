@@ -20,7 +20,7 @@ namespace ApplicationToSellThings.APIs.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = "UserOnly")]
+        [Authorize(Policy = "UserPolicy")]
         public async Task<IActionResult> CreateOrder(OrderApiRequestModel orderRequestModel)
         {
             try
