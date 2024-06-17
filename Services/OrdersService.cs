@@ -17,38 +17,58 @@ namespace ApplicationToSellThings.APIs.Services
 
         public async Task<ResponseModel<OrderApiResponseModel>> CreateOrder(OrderApiRequestModel orderRequestModel)
         {
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
             try
             {
-                var product = await _dbContext.Products.FindAsync(orderRequestModel.ProductId);
-
                 var orderData = new Order
                 {
                     OrderId = Guid.NewGuid(),
                     UserId = orderRequestModel.UserId,
                     PaymentMethod = orderRequestModel.PaymentMethod,
                     CardId = orderRequestModel.CardId,
-                    TotalAmount = (decimal)product.Price * orderRequestModel.Quantity,
+                    TotalAmount = 0, // This will be calculated later
                     Tax = 0,
                     OrderStatus = "Pending",
                     OrderCreatedAt = DateTime.UtcNow,
                     OrderDetails = new List<OrderDetail>()
                 };
 
-                var orderDetail = new OrderDetail
-                {
-                    OrderDetailId = Guid.NewGuid(),
-                    OrderId = orderData.OrderId,
-                    ProductId = product.ProductId,
-                    AddressId = orderRequestModel.ShippingAddressId,
-                    Quantity = orderRequestModel.Quantity,
-                    Total = orderData.TotalAmount,
-                    Product = product
-                };
+                decimal totalAmount = 0;
 
-                orderData.OrderDetails.Add(orderDetail);
+                foreach (var productModel in orderRequestModel.Products)
+                {
+                    var product = await _dbContext.Products.FindAsync(productModel.ProductId);
+                    if (product == null)
+                    {
+                        return new ResponseModel<OrderApiResponseModel>
+                        {
+                            StatusCode = 404,
+                            Status = "Error",
+                            Message = $"Product with ID {productModel.ProductId} not found",
+                        };
+                    }
+
+                    var orderDetail = new OrderDetail
+                    {
+                        OrderDetailId = Guid.NewGuid(),
+                        OrderId = orderData.OrderId,
+                        ProductId = product.ProductId,
+                        AddressId = orderRequestModel.ShippingAddressId,
+                        Quantity = productModel.Quantity,
+                        Total = (decimal)product.Price * productModel.Quantity,
+                        Product = product
+                    };
+
+                    totalAmount += orderDetail.Total;
+
+                    orderData.OrderDetails.Add(orderDetail);
+                }
+
+                orderData.TotalAmount = totalAmount;
 
                 _dbContext.Orders.Add(orderData);
                 await _dbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 var response = new ResponseModel<OrderApiResponseModel>()
                 {
@@ -61,16 +81,22 @@ namespace ApplicationToSellThings.APIs.Services
                         TotalAmount = orderData.TotalAmount,
                         Tax = orderData.Tax,
                         OrderStatus = orderData.OrderStatus,
-                        Quantity = orderDetail.Quantity,
-                        Product = product,
-                        OrderCreatedAt = orderData.OrderCreatedAt,                        
+                        OrderCreatedAt = orderData.OrderCreatedAt,
+                        OrderDetails = orderData.OrderDetails.Select(od => new OrderDetailApiResponseModel
+                        {
+                            ProductId = od.ProductId,
+                            Quantity = od.Quantity,
+                            Total = od.Total,
+                            ProductName = od.Product.ProductName
+                        }).ToList()
                     },
                 };
 
                 return response;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
+                await transaction.RollbackAsync();
                 return new ResponseModel<OrderApiResponseModel>
                 {
                     StatusCode = 500,
