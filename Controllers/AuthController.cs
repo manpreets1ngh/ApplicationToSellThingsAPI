@@ -102,7 +102,7 @@ namespace ApplicationToSellThings.APIs.Controllers
 
                 await userManager.AddToRoleAsync(user, UserRole.User);
 
-                return Ok(new ResponseModel<string> { Status = "Success", Message = "User created successfully!" });
+                return Ok(new ResponseModel<string> { Status = "Success", Message = "User created successfully!", StatusCode = 200});
             }
             catch (Exception ex)
             {
@@ -139,7 +139,7 @@ namespace ApplicationToSellThings.APIs.Controllers
                     return Ok(new ResponseModel<string>{ Status = "Success", StatusCode = 200, Message = "User Logged In successfully!", Data = token, Items = (List<string>)userRoles });
 
                 }
-                return Ok(new ResponseModel<string> { Status = "Error", StatusCode = 404, Message = "Invalid username or password" });
+                return Unauthorized(new ResponseModel<string> { Status = "Error", StatusCode = 404, Message = "Invalid username or password" });
             }
             catch (Exception ex)
             {

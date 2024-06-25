@@ -40,5 +40,12 @@ namespace ApplicationToSellThings.APIs.Controllers
             var result = await _orderService.GetOrdersByUserId(userId);
             return Ok(result);
         }
+        
+        [HttpGet]
+        public async Task<IActionResult> GetAllOrders()
+        {
+            var result = await _orderService.GetAllOrdersAsync();
+            return Ok(result);
+        }
     }
 }
