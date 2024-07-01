@@ -47,5 +47,27 @@ namespace ApplicationToSellThings.APIs.Controllers
             var result = await _orderService.GetAllOrdersAsync();
             return Ok(result);
         }
+        
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateOrder(Order order)
+        {
+            try
+            {
+                var result = await _orderService.UpdateOrderById(order.OrderId, order);
+                
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                var response = new ResponseModel<string>
+                {
+                    StatusCode = 500,
+                    Status = "Error",
+                    Message = ex.Message,
+                };
+
+                return StatusCode(500, new { status = response.Status, message = response.Message });
+            }
+        }
     }
 }

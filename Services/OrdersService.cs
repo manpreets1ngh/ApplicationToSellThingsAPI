@@ -9,10 +9,12 @@ namespace ApplicationToSellThings.APIs.Services
     public class OrdersService : IOrdersService
     {
         private readonly ApplicationToSellThingsAPIsContext _dbContext;
+        private readonly IAddressService _addressService;
 
-        public OrdersService(ApplicationToSellThingsAPIsContext dbContext)
+        public OrdersService(ApplicationToSellThingsAPIsContext dbContext, IAddressService addressService)
         {
             _dbContext = dbContext;
+            _addressService = addressService;
         }
 
         public async Task<ResponseModel<OrderApiResponseModel>> CreateOrder(OrderApiRequestModel orderRequestModel)
@@ -158,10 +160,29 @@ namespace ApplicationToSellThings.APIs.Services
             try
             {
                 var orders = await _dbContext.Orders
+                    .Include(o => o.OrderDetails)
+                        .ThenInclude(od => od.Product)
                     .ToListAsync();
-
+                
                 if (orders != null)
                 {
+                    foreach (var order in orders)
+                    {
+                        foreach (var orderDetail in order.OrderDetails)
+                        {
+                            var addresses = await _addressService.GetAddressByUser(order.UserId);
+                            if (addresses.StatusCode == 200 && addresses.Items != null)
+                            {
+                                foreach (var address in addresses.Items)
+                                {
+                                    if (orderDetail.AddressId == address.Id)
+                                    {
+                                        orderDetail.Address = address;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     var response = new ResponseModel<Order>()
                     {
                         StatusCode = 200,
@@ -199,43 +220,87 @@ namespace ApplicationToSellThings.APIs.Services
         {
             try
             {
-                var order = await _dbContext.Orders.FindAsync(orderId);
-                order.OrderId = Guid.NewGuid();
+                var order = await _dbContext.Orders
+                    .Include(o => o.OrderDetails)
+                    .FirstOrDefaultAsync(o => o.OrderId == orderId);
+                
+                if (order == null)
+                {
+                    return new ResponseModel<Order>
+                    {
+                        StatusCode = 404,
+                        Status = "Not Found",
+                        Message = "Order not found"
+                    };
+                }
+
                 order.UserId = orderModel.UserId;
                 order.PaymentMethod = orderModel.PaymentMethod;
                 order.CardId = orderModel.CardId;
-                order.TotalAmount = 0; // This will be calculated later
-                order.Tax = 0;
-                order.OrderStatus = orderModel.PaymentMethod;
-                order.OrderCreatedAt = DateTime.UtcNow;
-                order.OrderDetails = new List<OrderDetail>();
+                order.OrderStatus = orderModel.OrderStatus;
+                order.Tax = orderModel.Tax;
+                order.OrderCreatedAt = orderModel.OrderCreatedAt;
+                order.OrderUpdatedAt = DateTime.Now;
 
-                    decimal totalAmount = 0;
+                var existingOrderDetails = order.OrderDetails.ToList();
 
-                    foreach (var orderDetail in orderModel.OrderDetails)
+                foreach (var orderDetail in orderModel.OrderDetails)
+                {
+                    var existingOrderDetail = existingOrderDetails.FirstOrDefault(od => od.OrderDetailId == orderDetail.OrderDetailId);
+                    if (existingOrderDetail != null)
                     {
-                        foreach (var orderDetailresult in order.OrderDetails)
-                        {
-                            orderDetailresult.OrderDetailId = orderDetail.OrderDetailId;
-                            orderDetailresult.OrderId = orderDetail.OrderId;
-                            orderDetailresult.ProductId = orderDetail.ProductId;
-                            orderDetailresult.AddressId = orderDetail.AddressId;
-                            orderDetailresult.Quantity = orderDetail.Quantity;
-                            orderDetailresult.Total = (decimal)orderDetail.Product.Price * orderDetail.Quantity;
-                            orderDetailresult.Product = orderDetail.Product;
-
-                            totalAmount += orderDetail.Total;
-
-                            //orderDetailresult.OrderDetails.Add(orderDetail);
-                        }
+                        // Update existing order detail
+                        existingOrderDetail.ProductId = orderDetail.ProductId;
+                        existingOrderDetail.AddressId = orderDetail.AddressId;
+                        existingOrderDetail.Quantity = orderDetail.Quantity;
+                        existingOrderDetail.Total = orderDetail.Quantity * orderDetail.Product.Price;
                     }
+                    else
+                    {
+                        // Add new order detail
+                        var newOrderDetail = new OrderDetail
+                        {
+                            OrderDetailId = orderDetail.OrderDetailId != Guid.Empty ? orderDetail.OrderDetailId : Guid.NewGuid(),
+                            OrderId = order.OrderId,
+                            ProductId = orderDetail.ProductId,
+                            AddressId = orderDetail.AddressId,
+                            Quantity = orderDetail.Quantity,
+                            Total = orderDetail.Quantity * orderDetail.Product.Price,
+                        };
+                        order.OrderDetails.Add(newOrderDetail);
+                    }
+                }
+                
+                // Remove order details that are not in the updated list
+                foreach (var existingOrderDetail in existingOrderDetails)
+                {
+                    if (!orderModel.OrderDetails.Any(od => od.OrderDetailId == existingOrderDetail.OrderDetailId))
+                    {
+                        _dbContext.OrderDetails.Remove(existingOrderDetail);
+                    }
+                }
 
-                    /*
-                    orderDetailresult.TotalAmount = totalAmount;
+                // Calculate total amount
+                order.TotalAmount = order.OrderDetails.Sum(od => od.Total);
 
-                    _dbContext.Orders.Add(orderData);
-                    await _dbContext.SaveChangesAsync();
-                    await transaction.CommitAsync();*/
+                _dbContext.Orders.Update(order);
+                await _dbContext.SaveChangesAsync();
+
+                return new ResponseModel<Order>
+                {
+                    StatusCode = 200,
+                    Status = "Success",
+                    Data = order
+                };
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                return new ResponseModel<Order>
+                {
+                    StatusCode = 409,
+                    Status = "Concurrency Error",
+                    Message = "The record you attempted to edit was modified by another user after you got the original value. The edit operation was canceled."
+                };
             }
             catch (Exception ex)
             {
@@ -243,7 +308,7 @@ namespace ApplicationToSellThings.APIs.Services
                 {
                     StatusCode = 500,
                     Status = "Error",
-                    Message = ex.Message.ToString()
+                    Message = ex.Message
                 };
             }
         }
