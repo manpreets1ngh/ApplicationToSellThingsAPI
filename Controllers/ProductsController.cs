@@ -81,16 +81,9 @@ namespace ApplicationToSellThings.APIs.Controllers
         {
             try
             {
-                var result = await _productService.UpdateProduct(product);
-                var updatedResponse = new ResponseModel<Product>
-                {
-                    StatusCode = 200,
-                    Status = "Success",
-                    Message = "Product Updated Successfully",
-                    Data = product
-                };
-
-                return Ok(updatedResponse);
+                var result = await _productService.UpdateProduct(product.ProductId, product);
+              
+                return Ok(result);
             }
             catch (Exception ex)
             {
@@ -106,7 +99,7 @@ namespace ApplicationToSellThings.APIs.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Product>> PostProduct(Product product)
+        public async Task<ActionResult<ProductViewResponseModel>> PostProduct(Product product)
         {
             var productData = await _productService.CreateProduct(product);
             return productData;

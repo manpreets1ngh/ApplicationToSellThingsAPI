@@ -10,9 +10,11 @@ namespace ApplicationToSellThings.APIs.Models
         public string ProductName { get; set; }
         public decimal Price { get; set; }
         public decimal? Discount { get; set; }
-        public string? Description { get; set; }
-        public string? Category { get; set; }
-        public int? QuantityInStock { get; set; }
-        public DateTime? CreatedAt { get; set; }
+        public string Description { get; set; }
+        public string Category { get; set; }
+        public int QuantityInStock { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public byte[]? ProductImage { get; set; }  // New property for storing image data
+
     }
 }

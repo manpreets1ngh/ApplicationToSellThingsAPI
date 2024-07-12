@@ -5,9 +5,9 @@ namespace ApplicationToSellThings.APIs.Services.Interface
     public interface IProductsService
     {
         Task<IEnumerable<Product>> GetProducts();
-        Task<Product> CreateProduct(Product product);
+        Task<ProductViewResponseModel> CreateProduct(Product product);
         Task<Product> GetProductById(Guid id);
-        Task<Product> UpdateProduct(Product product);
+        Task<ResponseModel<Product>> UpdateProduct(Guid productId, Product productModel);
         Task DeleteProduct(Guid id);
     }
 }
