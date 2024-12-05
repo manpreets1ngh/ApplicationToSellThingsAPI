@@ -6,5 +6,6 @@ namespace ApplicationToSellThings.APIs.Services.Interface
     {
         Task<ResponseModel<AddressResponseViewModel>> AddAddress(AddressRequestApiModel addressRequestApiModel);
         Task<ResponseModel<AddressResponseViewModel>> GetAddressByUser(Guid userId);
+        Task<ResponseModel<AddressResponseViewModel>> GetAddressById(Guid addressId);
     }
 }

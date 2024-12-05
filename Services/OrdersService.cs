@@ -1,6 +1,8 @@
-﻿using ApplicationToSellThings.APIs.Data;
+﻿using ApplicationToSellThings.APIs.Areas.Identity.Data;
+using ApplicationToSellThings.APIs.Data;
 using ApplicationToSellThings.APIs.Models;
 using ApplicationToSellThings.APIs.Services.Interface;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 
@@ -10,11 +12,17 @@ namespace ApplicationToSellThings.APIs.Services
     {
         private readonly ApplicationToSellThingsAPIsContext _dbContext;
         private readonly IAddressService _addressService;
-
-        public OrdersService(ApplicationToSellThingsAPIsContext dbContext, IAddressService addressService)
+        private readonly IStatusService _statusService;
+        private readonly EmailService _emailService;
+        private readonly UserManager<ApplicationToSellThingsAPIsUser> userManager;
+        public OrdersService(ApplicationToSellThingsAPIsContext dbContext, IAddressService addressService, IStatusService statusService, 
+            EmailService emailService, UserManager<ApplicationToSellThingsAPIsUser> userManager)
         {
             _dbContext = dbContext;
             _addressService = addressService;
+            _statusService = statusService;
+            _emailService = emailService;
+            this.userManager = userManager;
         }
 
         public async Task<ResponseModel<OrderApiResponseModel>> CreateOrder(OrderApiRequestModel orderRequestModel)
@@ -22,16 +30,47 @@ namespace ApplicationToSellThings.APIs.Services
             using var transaction = await _dbContext.Database.BeginTransactionAsync();
             try
             {
-                    var orderData = new Order
+                // Generate a unique order number
+                string orderNumber = GenerateOrderNumber();
+                int orderStatusId = await GetDeliveryStatusIdByAlias("S_PENDING");
+                int deliveryStatusId = await GetDeliveryStatusIdByAlias("S_NOTSHIPPED");
+                string userId = orderRequestModel.UserId.ToString();
+                var user = await userManager.FindByIdAsync(userId);
+                var shippingInfo = new ShippingInfoModel
+                {
+                    ShippingInfoId = Guid.NewGuid(),
+                    DeliveryStatusId = deliveryStatusId
+                };
+                _dbContext.ShippingInfos.Add(shippingInfo);
+                await _dbContext.SaveChangesAsync();
+
+                // Retrieve the shipping address
+                var shippingAddress = await _addressService.GetAddressById(orderRequestModel.ShippingAddressId);
+                var orderStatusInfo = await _statusService.GetStatusById(orderStatusId);
+                
+                if (shippingAddress == null)
+                {
+                    return new ResponseModel<OrderApiResponseModel>
+                    {
+                        StatusCode = 404,
+                        Status = "Error",
+                        Message = "Shipping address not found",
+                    };
+                }
+
+                var orderData = new Order
                     {
                         OrderId = Guid.NewGuid(),
                         UserId = orderRequestModel.UserId,
+                        OrderNumber = orderNumber,
                         PaymentMethod = orderRequestModel.PaymentMethod,
                         CardId = orderRequestModel.CardId,
                         TotalAmount = 0, // This will be calculated later
                         Tax = 0,
-                        OrderStatus = "Pending",
+                        OrderStatus = orderStatusInfo.Data.Name,
                         OrderCreatedAt = DateTime.UtcNow,
+                        ShippingInfoId = shippingInfo.ShippingInfoId,
+                        ShippingAddressId = shippingAddress.Data.Id,
                         OrderDetails = new List<OrderDetail>()
                     };
 
@@ -79,6 +118,7 @@ namespace ApplicationToSellThings.APIs.Services
                     Message = "Order Created Successfully",
                     Data = new OrderApiResponseModel
                     {
+                        OrderNumber = orderData.OrderNumber,
                         PaymentMethod = orderData.PaymentMethod,
                         TotalAmount = orderData.TotalAmount,
                         Tax = orderData.Tax,
@@ -94,6 +134,14 @@ namespace ApplicationToSellThings.APIs.Services
                     },
                 };
 
+                // Send confirmation email
+                var emailBody = $@"
+                        <h3>Order Confirmation</h3>
+                        <p>Thank you for your order !</p>
+                        <p>Order Number: {response.Data.OrderNumber}</p>
+                        <p>Total Amount: ${response.Data.TotalAmount}</p>
+                    ";
+                await _emailService.SendEmailAsync(user.Email, "Order Confirmation", emailBody);
                 return response;
             }
             catch (Exception ex)
@@ -112,11 +160,12 @@ namespace ApplicationToSellThings.APIs.Services
         {
             try
             {
-                List<Order> addressResponseViewModel = new List<Order>();
                 string id = userId.ToString();
                 var orders = await _dbContext.Orders
                     .Include(o => o.OrderDetails)                                    
-                    .ThenInclude(od => od.Product) 
+                    .ThenInclude(od => od.Product)
+                    .Include(os => os.ShippingInfo)
+                    .ThenInclude(st => st.DeliveryStatus)
                     .Where(o => o.UserId == userId)
                     .ToListAsync();
 
@@ -155,6 +204,55 @@ namespace ApplicationToSellThings.APIs.Services
             }
         }
 
+        public async Task<ResponseModel<Order>> GetOrderByOrderNumber(string orderNumber)
+        {
+            try
+            {
+                var order = await _dbContext.Orders
+                    .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Product)
+                    .Include(os => os.ShippingInfo)
+                    .ThenInclude(st => st.DeliveryStatus)
+                    .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
+
+
+                if (order != null)
+                {
+                    var response = new ResponseModel<Order>()
+                    {
+                        StatusCode = 200,
+                        Status = "Success",
+                        Message = "Order found!",
+
+                        Data = order,
+                    };
+
+                    return response;
+                }
+                else
+                {
+                    return new ResponseModel<Order>
+                    {
+                        StatusCode = 404,
+                        Status = "Not Found",
+                        Message = "Orders Not Found!",
+                        Items = null,
+                        Data = null
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new ResponseModel<Order>
+                {
+                    StatusCode = 500,
+                    Status = "Error",
+                    Message = ex.Message.ToString(),
+                };
+            }
+        }
+
+
         public async Task<ResponseModel<Order>> GetAllOrdersAsync()
         {
             try
@@ -162,8 +260,11 @@ namespace ApplicationToSellThings.APIs.Services
                 var orders = await _dbContext.Orders
                     .Include(o => o.OrderDetails)
                         .ThenInclude(od => od.Product)
+                    .Include(o => o.ShippingInfo)
+                        .ThenInclude(si => si.DeliveryStatus) // Include DeliveryStatus
                     .ToListAsync();
-                
+
+
                 if (orders != null)
                 {
                     foreach (var order in orders)
@@ -222,6 +323,7 @@ namespace ApplicationToSellThings.APIs.Services
             {
                 var order = await _dbContext.Orders
                     .Include(o => o.OrderDetails)
+                    .Include(o => o.ShippingInfo)
                     .FirstOrDefaultAsync(o => o.OrderId == orderId);
                 
                 if (order == null)
@@ -241,6 +343,30 @@ namespace ApplicationToSellThings.APIs.Services
                 order.Tax = orderModel.Tax;
                 order.OrderCreatedAt = orderModel.OrderCreatedAt;
                 order.OrderUpdatedAt = DateTime.Now;
+
+                if (orderModel.ShippingInfo != null)
+                {
+                    order.ShippingInfo.ShippingDate = orderModel.ShippingInfo.ShippingDate;
+                    order.ShippingInfo.EstimatedDeliveryDate = orderModel.ShippingInfo.EstimatedDeliveryDate;
+                    order.ShippingInfo.ActualDeliveryDate = orderModel.ShippingInfo.ActualDeliveryDate;
+                    order.ShippingInfo.DeliveryStatusId = orderModel.ShippingInfo.DeliveryStatusId;
+                }
+
+                // Update ShippingAddress
+                if (orderModel.ShippingAddressId != Guid.Empty)
+                {
+                    var shippingAddress = await _addressService.GetAddressById(orderModel.ShippingAddressId);
+                    if (shippingAddress == null)
+                    {
+                        return new ResponseModel<Order>
+                        {
+                            StatusCode = 404,
+                            Status = "Not Found",
+                            Message = "Shipping address not found"
+                        };
+                    }
+                    order.ShippingAddressId = shippingAddress.Data.Id;
+                }
 
                 var existingOrderDetails = order.OrderDetails.ToList();
 
@@ -311,6 +437,218 @@ namespace ApplicationToSellThings.APIs.Services
                     Message = ex.Message
                 };
             }
+        }
+
+
+        public async Task<ResponseModel<ShippingInfoModel>> GetShippingInfo(Guid orderId)
+        {
+            try
+            {
+                var order = await _dbContext.Orders
+                    .Include(o => o.ShippingInfo)
+                    .ThenInclude(st => st.DeliveryStatus)
+                    .FirstOrDefaultAsync(o => o.OrderId == orderId);
+
+                if (order == null || order.ShippingInfo == null)
+                {
+                    return new ResponseModel<ShippingInfoModel>
+                    {
+                        StatusCode = 404,
+                        Status = "Not Found",
+                        Message = "Order or ShippingInfo not found"
+                    };
+                }
+
+                return new ResponseModel<ShippingInfoModel>
+                {
+                    StatusCode = 200,
+                    Status = "Success",
+                    Message = "ShippingInfo retrieved successfully",
+                    Data = order.ShippingInfo
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseModel<ShippingInfoModel>
+                {
+                    StatusCode = 500,
+                    Status = "Error",
+                    Message = ex.Message
+                };
+            }
+        }
+
+
+        public async Task<ResponseModel<ShippingInfoModel>> UpdateShippingInfo(Guid orderId, ShippingInfoModel shippingInfoModel)
+        {
+            try
+            {
+                var order = await _dbContext.Orders
+                    .Include(o => o.ShippingInfo)
+                    .ThenInclude(st => st.DeliveryStatus)
+                    .FirstOrDefaultAsync(o => o.OrderId == orderId);
+
+                if (order == null || order.ShippingInfo == null)
+                {
+                    return new ResponseModel<ShippingInfoModel>
+                    {
+                        StatusCode = 404,
+                        Status = "Not Found",
+                        Message = "Order or ShippingInfo not found"
+                    };
+                }
+
+                // Update ShippingInfo properties
+                order.ShippingInfo.ShippingDate = shippingInfoModel.ShippingDate;
+                order.ShippingInfo.EstimatedDeliveryDate = shippingInfoModel.EstimatedDeliveryDate;
+                order.ShippingInfo.ActualDeliveryDate = shippingInfoModel.ActualDeliveryDate;
+                order.ShippingInfo.DeliveryStatus = shippingInfoModel.DeliveryStatus;
+
+                // Save changes to the database
+                _dbContext.ShippingInfos.Update(order.ShippingInfo);
+                await _dbContext.SaveChangesAsync();
+
+                return new ResponseModel<ShippingInfoModel>
+                {
+                    StatusCode = 200,
+                    Status = "Success",
+                    Message = "ShippingInfo updated successfully",
+                    Data = order.ShippingInfo
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseModel<ShippingInfoModel>
+                {
+                    StatusCode = 500,
+                    Status = "Error",
+                    Message = ex.Message
+                };
+            }
+        }
+
+
+        public async Task<ResponseModel<Order>> UpdateOrderStatusAndShippingInfo(Guid orderId, string newStatus, ShippingInfoModel? shippingInfoUpdates = null)
+        {
+            try
+            {
+                var order = await _dbContext.Orders
+                    .Include(o => o.ShippingInfo)
+                    .FirstOrDefaultAsync(o => o.OrderId == orderId);
+
+                if (order == null)
+                {
+                    return new ResponseModel<Order>
+                    {
+                        StatusCode = 404,
+                        Status = "Not Found",
+                        Message = "Order not found"
+                    };
+                }
+
+                // Update Order Status if provided
+                if (!string.IsNullOrEmpty(newStatus))
+                {
+                    order.OrderStatus = newStatus;
+                    order.OrderUpdatedAt = DateTime.UtcNow;
+                }
+
+                // Update ShippingInfo if provided
+                if (shippingInfoUpdates != null && order.ShippingInfo != null)
+                {
+                    order.ShippingInfo.ShippingDate = shippingInfoUpdates.ShippingDate ?? order.ShippingInfo.ShippingDate;
+                    order.ShippingInfo.EstimatedDeliveryDate = shippingInfoUpdates.EstimatedDeliveryDate ?? order.ShippingInfo.EstimatedDeliveryDate;
+                    order.ShippingInfo.ActualDeliveryDate = shippingInfoUpdates.ActualDeliveryDate ?? order.ShippingInfo.ActualDeliveryDate;
+
+                    // Update DeliveryStatus if needed
+                    if (shippingInfoUpdates.DeliveryStatusId > 0 && shippingInfoUpdates.DeliveryStatusId != order.ShippingInfo.DeliveryStatusId)
+                    {
+                        order.ShippingInfo.DeliveryStatusId = shippingInfoUpdates.DeliveryStatusId;
+                    }
+                }
+
+                // Apply conditional updates based on Order Status
+                if (order.ShippingInfo != null)
+                {
+                    switch (newStatus)
+                    {
+                        case "Dispatched":
+                            order.ShippingInfo.ShippingDate = DateTime.UtcNow;
+                            order.ShippingInfo.DeliveryStatusId = await GetDeliveryStatusIdByAlias("S_INTRANSIT");
+                            break;
+
+                        case "Delivered":
+                            order.ShippingInfo.ActualDeliveryDate = DateTime.UtcNow;
+                            order.ShippingInfo.DeliveryStatusId = await GetDeliveryStatusIdByAlias("S_DELIVERED");
+                            break;
+
+                        case "Cancelled":
+                            order.ShippingInfo.DeliveryStatusId = await GetDeliveryStatusIdByAlias("S_DELIVERYFAILED");
+                            break;
+
+                        default:
+                            // Optional: Add logging or validation for unsupported statuses
+                            break;
+                    }
+                }
+
+                _dbContext.Orders.Update(order);
+                await _dbContext.SaveChangesAsync();
+
+                return new ResponseModel<Order>
+                {
+                    StatusCode = 200,
+                    Status = "Success",
+                    Message = "Order and ShippingInfo updated successfully",
+                    Data = order
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseModel<Order>
+                {
+                    StatusCode = 500,
+                    Status = "Error",
+                    Message = ex.Message
+                };
+            }
+        }
+
+
+
+        /* Private Methods */
+
+        private string GenerateOrderNumber()
+        {
+            // Get the current date in YYYYMMDD format
+            string datePart = DateTime.UtcNow.ToString("yyyyMMdd");
+
+            // Generate a random alphanumeric string (e.g., 6 characters long)
+            string randomPart = GenerateRandomAlphanumericString(6);
+
+            // Combine parts into a final order number
+            return $"{datePart}-{randomPart}";
+        }
+
+        private string GenerateRandomAlphanumericString(int length)
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            var random = new Random();
+            return new string(Enumerable.Repeat(chars, length)
+                .Select(s => s[random.Next(s.Length)]).ToArray());
+        }
+
+        private async Task<int> GetDeliveryStatusIdByAlias(string alias)
+        {
+            var deliveryStatus = await _dbContext.Status
+                .FirstOrDefaultAsync(ds => ds.Alias == alias);
+
+            if (deliveryStatus == null)
+            {
+                throw new Exception($"Delivery status with alias '{alias}' not found.");
+            }
+
+            return deliveryStatus.Id;
         }
     }
 }

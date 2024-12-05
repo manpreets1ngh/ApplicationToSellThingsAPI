@@ -1,5 +1,6 @@
 using ApplicationToSellThings.APIs.Areas.Identity.Data;
 using ApplicationToSellThings.APIs.Data;
+using ApplicationToSellThings.APIs.Models;
 using ApplicationToSellThings.APIs.Services;
 using ApplicationToSellThings.APIs.Services.Interface;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -19,6 +20,8 @@ builder.Services.AddIdentity<ApplicationToSellThingsAPIsUser, IdentityRole>(opti
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationToSellThingsAPIIdentityContext>();
 
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+
 // Add services to the container.
 
 builder.Services.AddControllers();
@@ -29,6 +32,8 @@ builder.Services.AddScoped<IProductsService, ProductsService>();
 builder.Services.AddScoped<IOrdersService, OrdersService>();
 builder.Services.AddScoped<IAddressService, AddressService>();
 builder.Services.AddScoped<ICardService, CardService>();
+builder.Services.AddScoped<IStatusService, StatusService>();
+builder.Services.AddScoped<EmailService>();
 
 builder.Services.AddCors(options =>
 {
@@ -77,6 +82,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("UserPolicy", policy => policy.RequireRole("User"));
+    options.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"));
 });
 
 var app = builder.Build();
@@ -93,6 +99,23 @@ app.UseCors("AllowClientOrigin");
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.Use(async (context, next) =>
+{
+    await next();
+
+    if (context.Response.StatusCode == 401) // Unauthorized
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync("{\"Message\":\"You are not authorized to access this resource.\"}");
+    }
+    else if (context.Response.StatusCode == 403) // Forbidden
+    {
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync("{\"Message\":\"Access denied. Admin permissions required.\"}");
+    }
+});
+
 
 app.MapControllers();
 

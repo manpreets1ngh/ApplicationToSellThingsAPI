@@ -2,6 +2,7 @@
 {
     public class OrderApiResponseModel
     {
+        public string OrderNumber { get; set; }
         public string PaymentMethod { get; set; }
         public decimal TotalAmount { get; set; }
         public decimal Tax { get; set; }

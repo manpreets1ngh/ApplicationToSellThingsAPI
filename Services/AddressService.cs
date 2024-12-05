@@ -119,5 +119,41 @@ namespace ApplicationToSellThings.APIs.Services
 
         }
 
+        public async Task<ResponseModel<AddressResponseViewModel>> GetAddressById(Guid addressId)
+        {
+            var address = await _dbContext.Addresses.FindAsync(addressId);
+
+            if (address != null)
+            {
+                var addressResponseData = new AddressResponseViewModel()
+                {
+                    Id = address.Id,
+                    UserId = address.UserId,
+                    Street = address.Street,
+                    City = address.City,
+                    State = address.State,
+                    PostCode = address.PostCode,
+                    Country = address.Country
+                };
+
+                var response = new ResponseModel<AddressResponseViewModel>()
+                {
+                    StatusCode = 200,
+                    Status = "Success",
+                    Message = "Address Founded Successfully",
+                    Data = addressResponseData,
+                };
+
+                return response;
+            }
+            return new ResponseModel<AddressResponseViewModel>
+            {
+                StatusCode = 401,
+                Status = "Failure",
+                Message = "Address Not Found"
+            };
+
+        }
+
     }
 }

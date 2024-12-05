@@ -1,5 +1,6 @@
 ﻿using ApplicationToSellThings.APIs.Models;
 using ApplicationToSellThings.APIs.Services.Interface;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,6 +17,7 @@ namespace ApplicationToSellThings.APIs.Controllers
             _addressService = addressService;
         }
 
+        [Authorize(Policy = "UserPolicy")]
         [HttpPost]
         public async Task<IActionResult> AddAddress([FromBody]AddressRequestApiModel addressRequestApiModel)
         {
@@ -23,6 +25,7 @@ namespace ApplicationToSellThings.APIs.Controllers
             return Ok(result);
         }
 
+        [Authorize(Policy = "UserPolicy")]
         [HttpGet("{userId}")]
         public async Task<IActionResult> GetAddressByUser(Guid userId)
         {
